@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Catch the Falling Chairs and Money!!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+            text-align: center;
+        }
+
+        #gameArea {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    max-width: 600px; /* Limit max width */
+    max-height: 800px; /* Limit max height */
+    margin: 0 auto; /* Center the game area */
+    background-color: #1a1a1a;
+    overflow: hidden;
+}
+
+#basket {
+    position: absolute;
+    bottom: 5vh; /* Use viewport height units */
+    left: 50%;
+    transform: translateX(-50%);
+    height: 40px;
+    width: 30%; /* Use percentage width */
+    min-width: 100px; /* Ensure minimum width */
+    max-width: 200px; /* Limit maximum width */
+    background-color: brown;
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    color: white;
+}
+
+        #scoreBoard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+        }
+
+        #chancesLeft {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+        }
+
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        #customMessage {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+
+        #characterSelect {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 24px;
+        }
+
+        .selectButton {
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #444;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 24px;
+        }
+
+        .selectButton:hover {
+            background-color: #665;
+        }
+
+        #loveAd {
+            display: none;
+            position: absolute;
+            top: 50%;
+            font-size: 72px;
+            color: pink;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            white-space: nowrap;
+        }
+
+        #characterMessage {
+            font-size: 20px;
+            margin-bottom: 20px;
+            max-width: 80%;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <div id="scoreBoard">Gentle👔Score: 0</div>
+        <div id="chancesLeft">Chair❤️‍🔥HP: 5</div>
+        <div id="basket"></div>
+        <div id="loveAd">LOVE AD</div>
+        <div id="gameOver">
+            Game Over 😪<br>
+            Your Gentle👔Score: <span id="finalScore"></span><br>
+            <div id="customMessage"></div>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+        <div id="characterSelect">
+            <div id="characterMessage">Please! 🗣 Be a gentleperson – help us save these chairs! 🥀</div>
+            <div>Select Your Character:</div>
+            <button class="selectButton" onclick="selectCharacter('Cura')">CU🧑‍✈️RA</button>
+            <button class="selectButton" onclick="selectCharacter('Hubert')">HUB🧑‍✈️ERT</button>
+        </div>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('gameArea');
+        const basket = document.getElementById('basket');
+        const scoreBoard = document.getElementById('scoreBoard');
+        const chancesLeftDisplay = document.getElementById('chancesLeft');
+        const gameOverScreen = document.getElementById('gameOver');
+        const characterSelectScreen = document.getElementById('characterSelect');
+        const finalScore = document.getElementById('finalScore');
+        const loveAd = document.getElementById('loveAd');
+
+        let score = 0;
+        let chairHP = 5;
+        let audioContext;
+        let gameTime = 0;
+        let spawnRate = 1500; // in milliseconds
+        let fallSpeed = 3;
+        let gameLoopId;
+        let spawnIntervalId;
+        let isPaused = false;
+
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playSineWave(frequency, duration) {
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function playWhiteNoise(duration) {
+            const bufferSize = audioContext.sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1;
+            }
+
+            const whiteNoise = audioContext.createBufferSource();
+            whiteNoise.buffer = buffer;
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            whiteNoise.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            whiteNoise.start();
+        }
+
+        function playChairCaughtSound() {
+            playSineWave(440, 0.2); // A4 note
+        }
+
+        function playMoneyCaughtSound() {
+            playSineWave(660, 0.2); // E5 note
+        }
+
+        function playChairLostSound() {
+            playWhiteNoise(0.3);
+        }
+
+        function playZombieCaughtSound() {
+            playSineWave(110, 0.5); // Low frequency for zombie
+        }
+
+        function startGame() {
+            score = 0;
+            chairHP = 5;
+            gameTime = 0;
+            spawnRate = 1500;
+            fallSpeed = 3;
+            updateScore();
+            updateChairHP();
+            gameOverScreen.style.display = 'none';
+            characterSelectScreen.style.display = 'none';
+            basket.style.left = '50%';
+            updateSpawnRate();
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function updateSpawnRate() {
+            clearInterval(spawnIntervalId);
+            spawnIntervalId = setInterval(createFallingEmoji, spawnRate);
+        }
+
+        function updateScore() {
+            scoreBoard.textContent = `Gentle👔Score: ${score}`;
+        }
+
+        function updateChairHP() {
+            chancesLeftDisplay.textContent = `Chair❤️‍🔥HP: ${chairHP}`;
+        }
+
+        function createFallingEmoji() {
+            if (isPaused) return;
+
+            const emoji = document.createElement('div');
+            emoji.classList.add('fallingEmoji');
+            const random = Math.random();
+            if (random < 0.05) {
+                emoji.textContent = '🧟';
+            } else if (random < 0.11) {
+                emoji.textContent = '💸';
+            } else if (random < 0.08) {
+                emoji.textContent = '❤️‍🔥';
+            } else {
+                emoji.textContent = '🪑';
+            }
+            emoji.style.left = `${Math.random() * (gameArea.clientWidth - 36)}px`;
+            emoji.style.top = '0px';
+            gameArea.appendChild(emoji);
+        }
+
+        function gameLoop() {
+            if (isPaused) {
+                gameLoopId = requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            gameTime++;
+            if (gameTime % 300 === 0) {
+                fallSpeed *= 1.2;
+            }
+            if (gameTime % 600 === 0) {
+                spawnRate = Math.max(200, spawnRate * 0.5);
+                updateSpawnRate();
+            }
+
+            const emojis = document.getElementsByClassName('fallingEmoji');
+            for (let i = emojis.length - 1; i >= 0; i--) {
+                const emoji = emojis[i];
+                const emojiRect = emoji.getBoundingClientRect();
+                const basketRect = basket.getBoundingClientRect();
+
+                emoji.style.top = `${parseFloat(emoji.style.top || 0) + fallSpeed}px`;
+
+                if (emojiRect.bottom >= basketRect.top &&
+                    emojiRect.left < basketRect.right &&
+                    emojiRect.right > basketRect.left) {
+                    if (emoji.textContent === '💸') {
+                        chairHP += 2;
+                        updateChairHP();
+                        playMoneyCaughtSound();
+                    } else if (emoji.textContent === '🧟') {
+                        chairHP -= 20;
+                        updateChairHP();
+                        playZombieCaughtSound();
+                    } else if (emoji.textContent === '❤️‍🔥') {
+                        score += 10;
+                        chairHP++;
+                        updateChairHP();
+                        updateScore();
+                        activateLoveAd();
+                    } else {
+                        playChairCaughtSound();
+                        score++;
+                    }
+                    gameArea.removeChild(emoji);
+                    updateScore();
+                    if (chairHP <= 0) {
+                        endGame();
+                        return;
+                    }
+                } else if (parseFloat(emoji.style.top) >= gameArea.clientHeight) {
+                    if (emoji.textContent === '🪑') {
+                        chairHP--;
+                        updateChairHP();
+                        playChairLostSound();
+                        if (chairHP <= 0) {
+                            endGame();
+                            return;
+                        }
+                    }
+                    gameArea.removeChild(emoji);
+                }
+            }
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function activateLoveAd() {
+            isPaused = true;
+            loveAd.style.display = 'block';
+            loveAd.style.left = gameArea.clientWidth + 'px';
+            let position = gameArea.clientWidth;
+
+            function moveAd() {
+                if (position < -loveAd.clientWidth) {
+                    loveAd.style.display = 'none';
+                    isPaused = false;
+                } else {
+                    position -= 10;
+                    loveAd.style.left = position + 'px';
+                    requestAnimationFrame(moveAd);
+                }
+            }
+
+            moveAd();
+        }
+
+        function endGame() {
+            cancelAnimationFrame(gameLoopId);
+            clearInterval(spawnIntervalId);
+            finalScore.textContent = score;
+            const customMessage = document.getElementById('customMessage');
+            customMessage.textContent = getCustomMessage(score);
+            gameOverScreen.style.display = 'block';
+        }
+
+        function getCustomMessage(score) {
+    if (score === 0) return "Not even a chair emoji can save you. 🪑";
+    if (score < 5) return "Don't worry, you'll chair-ish your next attempt more! 🪑";
+    if (score < 10) return "You missed the chair but at least you didn’t fall! 😂";
+    if (score < 15) return "You've got the right seat of mind! Keep going! 💺";
+    if (score < 20) return "At least you tried... and that's what chairs are for. 🪑";
+    if (score < 30) return "This is low-key sad, but you're still vibing. 💔";
+    if (score < 40) return "You're on the edge of your seat, keep at it! 🪑";
+    if (score < 50) return "You’re almost there, just one more push, chair bro! 😤";
+    if (score < 60) return "Chair up! You’re doing great! 😄";
+    if (score === 69) return "Nice. 😏";
+    if (score < 80) return "You're really standing out in the chair crowd! 👏";
+    if (score < 100) return "You’re doing great, sweetie! But those chairs are quick. 😘";
+    if (score < 120) return "You're not just sitting around, you're making moves! 💨";
+    if (score < 140) return "You're really chair-ishing the moment, aren't you? ✨";
+    if (score < 160) return "Your effort is chair-rific! Keep it up! 🌟";
+    if (score < 180) return "You're not just sitting, you’re winning! 🏆";
+    if (score < 200) return "Impressive! You're a chair-catching pro! 💪";
+    if (score < 220) return "Slaying the chair game like a true legend. 👑";
+    if (score < 240) return "Chair boss mode: ACTIVATED! 💪🪑";
+    if (score < 260) return "Amazing skills! You're on fire! 🔥";
+    if (score < 280) return "Incredible! You're a chair-catching legend! 👑";
+    if (score < 300) return "Chair-s to you for hitting that score! 😏";
+    if (score < 320) return "You're really pulling up a chair to success! 💪🪑";
+    if (score < 340) return "Phenomenal! You're defying gravity! 🚀";
+    if (score < 360) return "Outstanding! You're a true chair savior! 🦸";
+    if (score < 380) return "You’re catching chairs like they're Pokémons! Gotta catch 'em all! 🔥";
+    if (score < 400) return "Chair-catching champion of the world! 🎉🏆";
+    if (score < 420) return "Magnificent! You're the hero chairs deserve! 🏆";
+    if (score < 440) return "You're really sitting on top of the world right now! 🌍🪑";
+    if (score < 460) return "Legendary! Your chair-saving skills are unmatched! 🌟";
+    if (score < 480) return "Godlike! You've ascended to chair-catching divinity! 🙌";
+    if (score < 500) return "You’ve taken chair catching to the next level—what a chair-eer! 🚀";
+    if (score < 520) return "Are you even sitting? This is otherworldly! 🛸🪑";
+    if (score < 540) return "Chair-whisperer level unlocked! 🪑🔮";
+    if (score < 560) return "If chairs could talk, they'd ask for your autograph. 🪑🖊️";
+    if (score < 580) return "Your chair-catching game is stronger than Wi-Fi signals! 📶🪑";
+    if (score < 600) return "You've got more chairs than IKEA! 🏬🪑";
+    if (score < 620) return "Your chair game is so strong, it’s giving main character energy. 🌟🪑";
+    if (score < 640) return "You're the CEO of chair catching! 🏢🪑";
+    if (score < 660) return "You're reclining into greatness, one chair at a time! 🛋️";
+    if (score < 680) return "You’re sitting pretty at the top of the leaderboard! 👑🪑";
+    if (score < 700) return "You’ve officially leveled up to chair-catching elite! 🥇🪑";
+    return "Beyond imagination! You've transcended mortal chair-catching abilities! 🌌";
+}
+
+
+        function restartGame() {
+            cancelAnimationFrame(gameLoopId);
+            clearInterval(spawnIntervalId);
+            const emojis = document.getElementsByClassName('fallingEmoji');
+            while (emojis.length > 0) {
+                gameArea.removeChild(emojis[0]);
+            }
+            characterSelectScreen.style.display = 'flex';
+        }
+
+        function selectCharacter(character) {
+            if (character === 'Cura') {
+                basket.textContent = 'CU🧑‍✈️RA';
+                basket.style.width = '20%';
+                gameArea.style.backgroundColor = '#2a1a1a'; // Slightly pinkish dark grey
+            } else if (character === 'Hubert') {
+                basket.textContent = 'HUB🧑‍✈️ERT';
+                basket.style.width = '25%';
+                gameArea.style.backgroundColor = '#1a1a1a'; // Original dark grey
+            }
+            initAudio();
+            startGame();
+           resizeGameArea();
+        }
+
+        function handleTouchMove(e) {
+    e.preventDefault(); // Prevent scrolling
+    const touch = e.touches[0];
+    const gameAreaRect = gameArea.getBoundingClientRect();
+    const basketWidth = basket.offsetWidth;
+    const maxLeft = gameAreaRect.width - basketWidth;
+    
+    let basketX = touch.clientX - gameAreaRect.left - basketWidth / 2;
+    basketX = Math.max(0, Math.min(maxLeft, basketX));
+    
+    basket.style.left = `${basketX}px`;
+}
+
+gameArea.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+        // Initialize audio context on user interaction
+        document.addEventListener('click', function initAudioContext() {
+            if (!audioContext) {
+                initAudio();
+            }
+            document.removeEventListener('click', initAudioContext);
+        }, { once: true });
+
+        characterSelectScreen.style.display = 'flex';
+
+function resizeGameArea() {
+    const gameAreaStyle = window.getComputedStyle(gameArea);
+    const gameAreaWidth = parseFloat(gameAreaStyle.width);
+    const gameAreaHeight = parseFloat(gameAreaStyle.height);
+    const aspectRatio = 3 / 4; // Desired aspect ratio (4:3)
+
+    if (gameAreaHeight / gameAreaWidth > aspectRatio) {
+        gameArea.style.height = `${gameAreaWidth * aspectRatio}px`;
+    } else {
+        gameArea.style.width = `${gameAreaHeight / aspectRatio}px`;
+    }
+}
+
+window.addEventListener('resize', resizeGameArea);
+resizeGameArea(); // Call once at the start
+
+    </script>
+</body>
+</html>
